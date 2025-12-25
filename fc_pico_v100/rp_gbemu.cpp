@@ -43,6 +43,7 @@ uint8_t gb_cart_ram_read(struct gb_s* gb, const uint_fast32_t addr) {
 void gb_cart_ram_write(struct gb_s* gb, const uint_fast32_t addr, const uint8_t val) {
     struct gb_priv_s* priv = (struct gb_priv_s*)gb->direct.priv;
     priv->cart_ram[addr] = val;
+    gbemu.markSaveDirty();
 }
 
 void gb_error(struct gb_s* gb, const enum gb_error_e err, const uint16_t addr) {
@@ -73,6 +74,8 @@ rp_gbemu::rp_gbemu() {
     m_cart_ram_size = 0;
     memset(m_frame_buffer, 0, sizeof(m_frame_buffer));
     memset(m_rom_title, 0, sizeof(m_rom_title));
+    memset(m_save_path, 0, sizeof(m_save_path));
+    m_save_dirty = false;
 }
 
 bool rp_gbemu::init(const uint8_t* rom_data, uint32_t rom_size) {
@@ -133,6 +136,10 @@ bool rp_gbemu::init(const uint8_t* rom_data, uint32_t rom_size) {
     }
     m_rom_title[16] = '\0';
 
+    // Generate save path and load save data
+    generateSavePath();
+    loadSave();
+
     // Clear frame buffer
     memset(m_frame_buffer, 3, sizeof(m_frame_buffer));
 
@@ -169,4 +176,87 @@ void rp_gbemu::setJoypad(uint8_t fc_key) {
     gb_pad ^= 0xFF;
 
     gb.direct.joypad = gb_pad;
+}
+
+//=================================================
+// Save Data Management
+//=================================================
+
+void rp_gbemu::generateSavePath() {
+    // Create save path from ROM title: /saves/TITLE.sav
+    strcpy(m_save_path, "/saves/");
+
+    int j = 7; // Start after "/saves/"
+    for (int i = 0; i < 16 && m_rom_title[i] != '\0' && j < 28; i++) {
+        char c = m_rom_title[i];
+        // Replace invalid filename characters with underscore
+        if (c == ' ' || c == '/' || c == '\\' || c == ':' || c == '*' ||
+            c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+            c = '_';
+        }
+        m_save_path[j++] = c;
+    }
+    m_save_path[j] = '\0';
+    strcat(m_save_path, ".sav");
+
+    Serial.printf("Save path: %s\n", m_save_path);
+}
+
+bool rp_gbemu::loadSave() {
+    if (m_cart_ram == nullptr || m_save_path[0] == '\0') {
+        return false;
+    }
+
+    // Create saves directory if it doesn't exist
+    if (!LittleFS.exists("/saves")) {
+        LittleFS.mkdir("/saves");
+    }
+
+    if (!LittleFS.exists(m_save_path)) {
+        Serial.printf("No save file found: %s\n", m_save_path);
+        return false;
+    }
+
+    File f = LittleFS.open(m_save_path, "r");
+    if (!f) {
+        Serial.printf("Failed to open save file: %s\n", m_save_path);
+        return false;
+    }
+
+    size_t read_size = f.read(m_cart_ram, m_cart_ram_size);
+    f.close();
+
+    Serial.printf("Loaded save: %s (%d bytes)\n", m_save_path, read_size);
+    m_save_dirty = false;
+    return true;
+}
+
+bool rp_gbemu::saveSave() {
+    if (m_cart_ram == nullptr || m_save_path[0] == '\0') {
+        Serial.println("saveSave: cart_ram or save_path is null");
+        return false;
+    }
+
+    Serial.printf("saveSave: Attempting to save to %s\n", m_save_path);
+
+    // Create saves directory if it doesn't exist
+    if (!LittleFS.exists("/saves")) {
+        LittleFS.mkdir("/saves");
+    }
+
+    File f = LittleFS.open(m_save_path, "w");
+    if (!f) {
+        Serial.printf("Failed to create save file: %s\n", m_save_path);
+        m_save_dirty = false;  // Give up to avoid retry loop
+        return false;
+    }
+
+    // Only save actual cart RAM used (check first non-zero from end)
+    uint32_t save_size = 32 * 1024; // Default 32KB for most games
+    size_t written = f.write(m_cart_ram, save_size);
+    f.close();
+
+    Serial.printf("Saved: %s (%d bytes)\n", m_save_path, written);
+    m_save_dirty = false;
+    return true;
 }

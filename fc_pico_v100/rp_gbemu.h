@@ -7,6 +7,7 @@
 #define rp_gbemu_h
 
 #include "Arduino.h"
+#include <LittleFS.h>
 
 // Peanut-GB configuration - must be before including peanut_gb.h
 #define PEANUT_GB_IS_LITTLE_ENDIAN 1
@@ -57,7 +58,16 @@ public:
     // ROM info
     const char* getRomTitle() { return m_rom_title; }
 
+    // Save data management
+    bool loadSave();
+    bool saveSave();
+    void markSaveDirty() { m_save_dirty = true; }
+    bool isSaveDirty() { return m_save_dirty; }
+
 private:
+    // Generate save file path from ROM title
+    void generateSavePath();
+
     bool m_initialized;
     uint8_t m_frame_buffer[GB_LCD_WIDTH * GB_LCD_HEIGHT];
     uint8_t* m_rom;
@@ -65,6 +75,8 @@ private:
     uint8_t* m_cart_ram;
     uint32_t m_cart_ram_size;
     char m_rom_title[17];
+    char m_save_path[32];
+    bool m_save_dirty;
 };
 
 extern rp_gbemu gbemu;

@@ -24,8 +24,12 @@ private:
     // Draw border/frame around GB screen
     void drawBorder();
 
+    // Draw "SAVED" message
+    void drawSavedMessage();
+
     uint8_t m_sub_state;
     uint16_t m_frame_count;
+    uint8_t m_saved_display_frames;  // Frames remaining to show "SAVED"
 };
 
 extern ap_gb ap_g_gb;
