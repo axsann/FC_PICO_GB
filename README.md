@@ -129,23 +129,13 @@ python3 tools/rom2c.py your_game.gb res/gbrom.c
 
 ## ライセンス
 
-本プロジェクトは **GPL v3** ライセンスの下で配布されます。
+本プロジェクトは **MIT** ライセンスの下で配布されます。
 
 ### 使用ライブラリ
 
 | ライブラリ | ライセンス | 著作権者 |
 |-----------|-----------|---------|
-| rp_fcemu (FabGL由来) | GPL v3 | Fabrizio Di Vittorio |
-| ArduinoGL | MIT | Fabio de Albuquerque Dela Antonio |
 | Peanut-GB | MIT | Mahyar Koshkouei |
 | Tobu Tobu Girl | MIT / CC-BY 4.0 | Simon Larsen, Lukas Hansen |
-
-### GPL v3 について
-
-`rp_fcemu.cpp` が GPL v3 でライセンスされているため、本プロジェクト全体が GPL v3 の条件に従います。
-
-- ソースコードの公開義務があります
-- 派生物も GPL v3 でライセンスする必要があります
-- 商用ライセンスが必要な場合は FabGL の作者にお問い合わせください
 
 詳細は LICENSE ファイルを参照してください。

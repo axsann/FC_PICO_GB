@@ -19,7 +19,6 @@
 
 #endif
 
-#include "rp_fcemu.h"
 #include "rp_dma.h"
 #include "ap_main.h"
 

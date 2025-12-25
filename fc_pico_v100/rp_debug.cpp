@@ -80,7 +80,7 @@ void WDT_check() {
 		char buffer[50]; // バッファサイズを適切な値に設定
 
 		String msg;
-		snprintf(buffer, sizeof(buffer), "Warning WDT_check %d:%d step %d:%d\n",timer, WDT_mode,ap.getStep(),ap.getStepSub() );
+		snprintf(buffer, sizeof(buffer), "Warning WDT_check %d:%d step %d\n",timer, WDT_mode,ap.getStep() );
 		msg += buffer;
 		msg += strDebugTrace();
 

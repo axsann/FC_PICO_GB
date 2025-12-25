@@ -15,7 +15,6 @@
 #include "rp_system.h"
 #include "rp_gbemu.h"
 
-#include "ArduinoGL.h"
 #include "Canvas.h"
 #include "rp_dma.h"
 
@@ -35,12 +34,10 @@ rp_system sys;
 #include <BackgroundAudio.h>
 #include <PWMAudio.h>
 
-#include "rp_fcemu.h"
 #include "snd/sound_drv.c"
 #include "snd/song_dt0.c"
 
 rp_sound snd;
-rp_fcemu emu;
 PWMAudio pwm(0);
 BackgroundAudioMP3 mp3(pwm);
 

@@ -448,17 +448,11 @@ void rp_system::jobRcvCom() {
 		dt = getRcvCom();
 		Serial.printf( "FP_COM_INI %02x\n", dt );
 		setWDT_mode( 1 );
-		// Check if in GB mode - skip init2() to preserve ST_GB step
+		// GB mode - skip init2() to preserve ST_GB step
 		if (ap.getStep() == ST_GB) {
 			Serial.println("FP_COM_INI: GB mode active, skipping init2");
 		} else {
 			init2();
-			if ( dt != 0 ) {
-				emu.m_RAM[EM_PLY_STAGE] = dt;
-				emu.m_RAM[EM_DEMO_FG] = 0;
-				memset( &emu.m_RAM[GM_SCORE], 0, 4); // Clear score
-				ap.setStep( ST_GAME );
-			}
 		}
 		break;
 
