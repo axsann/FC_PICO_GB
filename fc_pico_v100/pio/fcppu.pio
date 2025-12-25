@@ -1,0 +1,76 @@
+;
+; Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+
+.define		IRQ_DIR		7
+
+; input pins
+.define public	PI_WR_BIT	21
+.define public	PI_RD_BIT	20
+;.define public	PI_PA13_BIT	19
+;.define public	PI_PA12_BIT	18
+.define public	PI_CS1_BIT	17
+;.define public	PI_OD_DIR_BIT	16
+
+; bi-directional pins
+.define public	PI_D7_BIT	13
+.define public	PI_D6_BIT	12
+.define public	PI_D5_BIT	11
+.define public	PI_D4_BIT	10
+.define public	PI_D3_BIT	9
+.define public	PI_D2_BIT	8
+.define public	PI_D1_BIT	7
+.define public	PI_D0_BIT	6
+
+.program fcppu_w
+.wrap_target
+	wait 0 gpio PI_WR_BIT
+	jmp  PIN  skip_ppu_data0
+	irq  set IRQ_DIR
+	wait 1 gpio PI_WR_BIT
+	in	pins, 32		; fetch bus data
+skip_ppu_data0:
+	wait 1 gpio PI_WR_BIT
+.wrap
+
+.program fcppu_r
+	mov  osr, null
+.wrap_target
+	wait 0 gpio PI_RD_BIT
+	jmp  PIN  skip_ppu_data
+	irq  set IRQ_DIR
+	out  pins, 8
+skip_ppu_data:
+	wait 1 gpio PI_RD_BIT
+	irq  set IRQ_DIR
+.wrap
+
+
+.program fcppu_dir
+.wrap_target
+	wait 1 irq IRQ_DIR
+	mov  osr, null
+	jmp  PIN  dir_in
+	mov  osr, ~null
+dir_in:
+	out  pindirs, 8
+	IRQ  clear IRQ_DIR
+.wrap
+
+.program fcppu_rna
+	mov  x, ~null
+.wrap_target
+	wait 0 gpio PI_RD_BIT
+	jmp  PIN  skip_ppu_data2
+	mov  isr, !x
+	jmp  x--  skip_ppu_data2
+skip_ppu_data2:
+	wait 1 gpio PI_RD_BIT
+.wrap
+
+% c-sdk {
+
+
+%}

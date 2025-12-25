@@ -1,0 +1,46 @@
+# FC PICO GB - .gitignore
+
+# Build outputs
+fc_pico_v100/build/
+
+# ROM files (use res/gbrom.c for embedded ROM)
+*.gb
+*.gbc
+*.nes
+*.sav
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE and editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Arduino IDE
+*.elf
+*.bin
+*.hex
+*.map
+*.uf2
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+
+# Claude Code
+.claude/

@@ -1,0 +1,3 @@
+const unsigned char mdl_bullet_col[] ={
+0x02,0x02,0x02,0x02,
+};
