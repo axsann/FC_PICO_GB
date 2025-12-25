@@ -228,9 +228,11 @@ public:
 //    void setScreenData( const uint8_t *paldt,  );
 
 	void setPalData( const uint8_t *paldt );
+	void forcePalUpdate();  // Force palette to be sent on next update
 	void setPal( uint8_t idx, uint8_t dt );
 	void setAtrData( const uint8_t *atrdt );
 	void clearAtrData( void );
+	void forceAtrUpdate();  // Force ATR to be sent on next update
 	void setAtr( uint8_t lx, uint8_t ly, uint8_t dt );
 	void setFcStep( uint8_t step ) { m_FC_STEP = step; }
 

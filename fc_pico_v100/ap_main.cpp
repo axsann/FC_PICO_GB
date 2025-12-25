@@ -16,10 +16,13 @@ void ap_main::init() {
 	Serial.printf("ap_main::init\n" );
 	setStep( 0 );
 	initObj();
+
+#if 0  // Disable original game
 	memset( emu.m_RAM, 0, 0x800);
 	emu.setROM( gamerom );
 	emu.setROM( gamerom );
 	emu.reset();
+#endif
 
 }
 
@@ -137,9 +140,19 @@ void ap_main::main() {
 			ap_cl.main();
 		}
 		break;
+	case ST_GB:
+		if ( m_step_sub == 0 ) {
+			TRACE(DTR_MAIN)
+			ap_g_gb.init();
+			m_step_sub++;
+		} else {
+			TRACE(DTR_MAIN)
+			ap_g_gb.main();
+		}
+		break;
 	case ST_WAIT:
 		break;
-	
+
 	default:
 		setStep( ST_INIT );
 		break;
@@ -148,7 +161,7 @@ void ap_main::main() {
 
 #if 0
 	{
-		char buffer[40]; // バッファを確保
+		char buffer[40]; // buffer for FPS display
 		sprintf(buffer, "FPS:%8d %8d", micros() - ap_main_time,  ap_main_time - ap_main_time_old );
 		c.drawString( buffer, 40, 40, _font );
 	}
@@ -187,7 +200,7 @@ void ap_main::initStarObj( uint16_t StartStarObjNo, uint16_t StarObjNum, float S
 
 
 
-/* 実験の残骸
+/* Old star object code (unused)
 	for( int i=0 ; i<80 ; i++ ) {
 //	for( int i=0 ; i<1 ; i++ ) {
 //		ap.m_obj[ OBJ_TIT_CUBE +i ].m_scale = 0.5f;

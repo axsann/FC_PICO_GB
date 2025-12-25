@@ -1,0 +1,75 @@
+/*
+    rp_gbemu.h - Game Boy Emulator wrapper for FC PICO
+    Peanut-GB based GB emulation on Raspberry Pi Pico
+*/
+
+#ifndef rp_gbemu_h
+#define rp_gbemu_h
+
+#include "Arduino.h"
+
+// Peanut-GB configuration - must be before including peanut_gb.h
+#define PEANUT_GB_IS_LITTLE_ENDIAN 1
+#define ENABLE_SOUND 0
+#define ENABLE_LCD 1
+#define PEANUT_GB_12_COLOUR 0  // 4-color mode for FC compatibility
+#define PEANUT_GB_HIGH_LCD_ACCURACY 0  // Reduce for performance
+
+// GB screen dimensions
+#define GB_LCD_WIDTH  160
+#define GB_LCD_HEIGHT 144
+
+// Offset to center GB screen on FC screen (256x240)
+#define GB_OFFSET_X ((256 - GB_LCD_WIDTH) / 2)   // 48
+#define GB_OFFSET_Y ((240 - GB_LCD_HEIGHT) / 2)  // 48
+
+// Maximum ROM size (2MB)
+#define GB_ROM_MAX_SIZE (2 * 1024 * 1024)
+// Maximum cart RAM size (128KB)
+#define GB_CART_RAM_MAX_SIZE (128 * 1024)
+
+// FC key to GB joypad mapping
+// FC:  A=0x80, B=0x40, SEL=0x20, RUN=0x10, UP=0x08, DOWN=0x04, LEFT=0x02, RIGHT=0x01
+// GB:  A=0x01, B=0x02, SEL=0x04, START=0x08, RIGHT=0x10, LEFT=0x20, UP=0x40, DOWN=0x80
+
+class rp_gbemu {
+public:
+    rp_gbemu();
+
+    // Initialize emulator with ROM data
+    bool init(const uint8_t* rom_data, uint32_t rom_size);
+
+    // Run one frame of emulation
+    void runFrame();
+
+    // Reset emulator
+    void reset();
+
+    // Set joypad state from FC controller input
+    void setJoypad(uint8_t fc_key);
+
+    // Get frame buffer pointer (for direct access)
+    uint8_t* getFrameBuffer() { return m_frame_buffer; }
+
+    // Check if emulator is initialized
+    bool isInitialized() { return m_initialized; }
+
+    // ROM info
+    const char* getRomTitle() { return m_rom_title; }
+
+private:
+    bool m_initialized;
+    uint8_t m_frame_buffer[GB_LCD_WIDTH * GB_LCD_HEIGHT];
+    uint8_t* m_rom;
+    uint32_t m_rom_size;
+    uint8_t* m_cart_ram;
+    uint32_t m_cart_ram_size;
+    char m_rom_title[17];
+};
+
+extern rp_gbemu gbemu;
+
+// Debug: last error code (0=OK, 1=NULL ROM, 2=RAM fail, 3=checksum, 4=unsupported)
+extern int g_gb_last_error;
+
+#endif

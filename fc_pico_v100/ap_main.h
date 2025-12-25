@@ -18,6 +18,7 @@
 #include "ap_clear.h"
 #include "ap_demo0.h"
 #include "ap_data.h"
+#include "ap_gb.h"
 
 enum {
 	ST_INIT = 0,
@@ -27,6 +28,7 @@ enum {
 	ST_DEMO1,
 	ST_OVER,
 	ST_CLEAR,
+	ST_GB,        // Game Boy emulation mode
 
 	ST_WAIT = 255,
 };

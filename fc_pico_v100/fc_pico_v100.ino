@@ -13,12 +13,16 @@
 #include "pio/fcppu.pio.h"
 
 #include "rp_system.h"
+#include "rp_gbemu.h"
 
 #include "ArduinoGL.h"
 #include "Canvas.h"
 #include "rp_dma.h"
 
 #include "ap_main.h"
+
+// GB Emulation Mode: Set to 1 to enable Game Boy mode
+#define GB_EMU_MODE 1
 
 #define LOOP_MS 1
 

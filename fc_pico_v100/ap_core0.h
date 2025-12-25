@@ -80,6 +80,37 @@ void init_timer_callback() {
 
 
 
+//=================================================
+//			GB ROM Loading Functions
+//=================================================
+#if GB_EMU_MODE
+
+// Include embedded ROM data
+#include "res/gbrom.c"
+
+// Initialize GB emulator with embedded ROM
+bool initGBEmulator() {
+	Serial.println("Initializing GB emulator with embedded ROM");
+	Serial.printf("ROM size: %lu bytes\n", gb_rom_size);
+
+	if (gb_rom_size < 0x150) {
+		Serial.println("Error: ROM too small");
+		return false;
+	}
+
+	// Initialize emulator with embedded ROM
+	bool result = gbemu.init(gb_rom_data, gb_rom_size);
+	if (!result) {
+		Serial.println("GB emulator init failed");
+		return false;
+	}
+
+	Serial.println("GB emulator OK");
+	return true;
+}
+
+#endif // GB_EMU_MODE
+
 void setup() {
 
 	Serial.begin(115200);
@@ -99,6 +130,16 @@ void setup() {
 
 	sys.frame_draw = 1;
 	ap.init();
+
+#if GB_EMU_MODE
+	// Initialize GB emulator and switch to GB mode
+	if (initGBEmulator()) {
+		Serial.println("Switching to GB emulation mode");
+		ap.setStep(ST_GB);
+	} else {
+		Serial.println("GB mode disabled");
+	}
+#endif
 }
 
 void loop() {

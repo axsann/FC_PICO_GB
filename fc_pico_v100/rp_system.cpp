@@ -8,6 +8,7 @@
 #include "Arduino.h"
 #include "pio/fcppu.pio.h"
 #include "rp_system.h"
+#include "rp_gbemu.h"
 
 #include "Canvas.h"
 
@@ -147,16 +148,16 @@ void rp_system::init(void) {
 	// DFPLAYER MINI
  	delay(1000);
  
-	//シリアル通信の初期化
+	// Initialize serial communication
 	Serial1.setTX(0);
 	Serial1.setRX(1);
 	Serial1.begin(9600);
 	if (!mp3.begin(Serial1, true, true)) {
-	    // 2秒以内に初期化できなかった場合はLED点滅の無限ループ
-	    // 配線を間違えていないか確認してください
+	    // Failed to initialize within 2 seconds - infinite LED blink loop
+	    // Check wiring if this happens
 		Serial.println( "Not Start DFPlayer MINI" );
 	}
-	//ボリュームの調整(0～30で指定)
+	// Volume adjustment (0-30)
 	mp3.volume(20);
 
 	mp3.playMp3Folder(2);
@@ -429,21 +430,35 @@ void rp_system::jobRcvCom() {
 		jobFP_COM_DLD( dt );
 		break;
 
-	case FP_COM_RST:	// PICOリスタート
+	case FP_COM_RST:	// PICO restart
 		Serial.println( "FP_COM_RST" );
-		soft_reset();
+		{
+			bool was_gb_mode = (ap.getStep() == ST_GB);
+			soft_reset();
+			// Restore GB mode after reset
+			if (was_gb_mode) {
+				Serial.println("FP_COM_RST: Restoring GB mode");
+				gbemu.reset();
+				ap.setStep(ST_GB);
+			}
+		}
 		break;
 
-	case FP_COM_INI:	//  PICO初期化
+	case FP_COM_INI:	// PICO initialize
 		dt = getRcvCom();
 		Serial.printf( "FP_COM_INI %02x\n", dt );
 		setWDT_mode( 1 );
-		init2();
-		if ( dt != 0 ) {
-			emu.m_RAM[EM_PLY_STAGE] = dt;
-			emu.m_RAM[EM_DEMO_FG] = 0;
-			memset( &emu.m_RAM[GM_SCORE], 0, 4); // スコアクリアー
-			ap.setStep( ST_GAME );
+		// Check if in GB mode - skip init2() to preserve ST_GB step
+		if (ap.getStep() == ST_GB) {
+			Serial.println("FP_COM_INI: GB mode active, skipping init2");
+		} else {
+			init2();
+			if ( dt != 0 ) {
+				emu.m_RAM[EM_PLY_STAGE] = dt;
+				emu.m_RAM[EM_DEMO_FG] = 0;
+				memset( &emu.m_RAM[GM_SCORE], 0, 4); // Clear score
+				ap.setStep( ST_GAME );
+			}
 		}
 		break;
 
@@ -574,6 +589,11 @@ void rp_system::setPalData( const uint8_t *paldt ) {
 	m_PAL_CHG = 1;
 }
 
+void rp_system::forcePalUpdate() {
+	// Clear m_PAL_W_old to force update() to send all palette entries
+	memset( m_PAL_W_old, 0xFF, 0x20);
+}
+
 void rp_system::setPal( uint8_t idx, uint8_t dt ) {
 	if ( m_PAL_W[ idx ] != dt ) {
 		Serial.printf("setPal %02x:%02x\n",idx,dt );
@@ -598,6 +618,11 @@ void rp_system::clearAtrData( void ) {
 	memset(m_ATR_W, 0x0, 0x40 );
 	memset(m_ATR_W_old, 0x0, 0x40 );
 	m_ATR_CHG = 1;
+}
+
+void rp_system::forceAtrUpdate() {
+	// Clear m_ATR_W_old to force update() to send all ATR entries
+	memset( m_ATR_W_old, 0xFF, 0x40);
 }
 
 
