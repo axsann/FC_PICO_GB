@@ -21,7 +21,8 @@ ap_gb ap_g_gb;
 void ap_gb::init() {
     m_sub_state = 0;
     m_frame_count = 0;
-    m_saved_display_frames = 0;
+    m_status_message = STATUS_NONE;
+    m_status_display_frames = 0;
 
     // Clear FC frame buffer
     uint8_t* fc_fb = c.bitmap();
@@ -55,18 +56,50 @@ void ap_gb::main() {
         return;
     }
 
-    uint8_t key = sys.getKeyNew();
+    uint8_t key_now = sys.getKeyNew();    // Currently held keys
+    uint8_t key_trg = sys.getKeyTrg();    // Just pressed this frame
 
-    // Manual save: SELECT + START
-    if ((key & 0x30) == 0x30 && gbemu.isSaveDirty()) {
-        // Perform save
-        gbemu.saveSave();
-        // Show "SAVED" for 1 second after save completes
-        m_saved_display_frames = 60;
+    // SELECT is held - check for button combinations
+    if (key_now & 0x20) {
+        // SELECT + A (just pressed): Save state
+        if (key_trg & 0x80) {
+            if (gbemu.saveState()) {
+                m_status_message = STATUS_STATE_SAVED;
+            } else if (gbemu.getLastStateError() == STATE_ERR_NO_FS) {
+                m_status_message = STATUS_STATE_NO_FS;
+            } else {
+                m_status_message = STATUS_STATE_ERROR;
+            }
+            m_status_display_frames = 60;
+        }
+        // SELECT + B (just pressed): Load state
+        else if (key_trg & 0x40) {
+            if (gbemu.loadState()) {
+                m_status_message = STATUS_STATE_LOADED;
+            } else if (gbemu.getLastStateError() == STATE_ERR_NO_FS) {
+                m_status_message = STATUS_STATE_NO_FS;
+            } else if (gbemu.getLastStateError() == STATE_ERR_FILE_OPEN) {
+                m_status_message = STATUS_STATE_NO_DATA;
+            } else {
+                m_status_message = STATUS_STATE_ERROR;
+            }
+            m_status_display_frames = 60;
+        }
+        // SELECT + START (just pressed): Save RAM
+        else if (key_trg & 0x10) {
+            if (gbemu.isSaveDirty()) {
+                gbemu.saveSave();
+                m_status_message = STATUS_RAM_SAVED;
+                m_status_display_frames = 60;
+            }
+        }
+
+        // Don't pass SELECT combo buttons to game
+        gbemu.setJoypad(key_now & 0x0F);  // Only pass direction keys
+    } else {
+        // Normal input - pass all keys to game
+        gbemu.setJoypad(key_now);
     }
-
-    // Update joypad from FC controller
-    gbemu.setJoypad(key);
 
     // Run one frame of GB emulation
     gbemu.runFrame();
@@ -74,10 +107,13 @@ void ap_gb::main() {
     // Render GB frame to FC frame buffer
     renderToFC();
 
-    // Show "SAVED" message if active
-    if (m_saved_display_frames > 0) {
-        drawSavedMessage();
-        m_saved_display_frames--;
+    // Show status message if active
+    if (m_status_display_frames > 0) {
+        drawStatusMessage();
+        m_status_display_frames--;
+        if (m_status_display_frames == 0) {
+            m_status_message = STATUS_NONE;
+        }
     }
 
     m_frame_count++;
@@ -134,18 +170,50 @@ void ap_gb::drawBorder() {
     }
 }
 
-void ap_gb::drawSavedMessage() {
+void ap_gb::drawStatusMessage() {
+    if (m_status_message == STATUS_NONE) return;
+
     // Fill GB screen area with black
     uint8_t* fc_fb = c.bitmap();
     for (int y = 0; y < GB_LCD_HEIGHT; y++) {
         memset(&fc_fb[(GB_OFFSET_Y + y) * CANVAS_WIDTH + GB_OFFSET_X], 0, GB_LCD_WIDTH);
     }
 
-    // Draw "SAVED" in center of GB screen area (2x scale)
-    const char* text = "SAVED";
-    int start_x = GB_OFFSET_X + 40;
-    int start_y = GB_OFFSET_Y + 64;
+    // Select message text based on status
+    const char* text;
+    int start_x;
+    switch (m_status_message) {
+        case STATUS_RAM_SAVED:
+            text = "SAVED";
+            start_x = GB_OFFSET_X + 60;  // (160 - 5*8) / 2 = 60
+            break;
+        case STATUS_STATE_SAVED:
+            text = "STATE SAVED";
+            start_x = GB_OFFSET_X + 36;  // (160 - 11*8) / 2 = 36
+            break;
+        case STATUS_STATE_LOADED:
+            text = "STATE LOADED";
+            start_x = GB_OFFSET_X + 32;  // (160 - 12*8) / 2 = 32
+            break;
+        case STATUS_STATE_NO_DATA:
+            text = "NO DATA";
+            start_x = GB_OFFSET_X + 52;  // (160 - 7*8) / 2 = 52
+            break;
+        case STATUS_STATE_NO_FS:
+            text = "NO FS";
+            start_x = GB_OFFSET_X + 60;  // (160 - 5*8) / 2 = 60
+            break;
+        case STATUS_STATE_ERROR:
+            text = "ERROR";
+            start_x = GB_OFFSET_X + 60;  // (160 - 5*8) / 2 = 60
+            break;
+        default:
+            return;
+    }
 
+    int start_y = GB_OFFSET_Y + 68;  // Centered vertically
+
+    // Draw text in center of GB screen area (1x scale, 8x8 font)
     for (int i = 0; text[i] != '\0'; i++) {
         uint8_t ch = text[i];
         const uint8_t* glyph = &_font[ch * 16];  // 16 bytes per char (8 bytes plane0, 8 bytes plane1)
@@ -154,13 +222,9 @@ void ap_gb::drawSavedMessage() {
             uint8_t bits = glyph[row];  // Use first plane (bytes 0-7)
             for (int col = 0; col < 8; col++) {
                 if (bits & (0x80 >> col)) {
-                    // Draw 2x2 pixel
-                    int px = start_x + i * 16 + col * 2;
-                    int py = start_y + row * 2;
+                    int px = start_x + i * 8 + col;
+                    int py = start_y + row;
                     fc_fb[py * CANVAS_WIDTH + px] = 3;
-                    fc_fb[py * CANVAS_WIDTH + px + 1] = 3;
-                    fc_fb[(py + 1) * CANVAS_WIDTH + px] = 3;
-                    fc_fb[(py + 1) * CANVAS_WIDTH + px + 1] = 3;
                 }
             }
         }

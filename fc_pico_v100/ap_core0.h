@@ -133,12 +133,17 @@ void setup() {
 
 #if GB_EMU_MODE
 	// Initialize LittleFS for save data
-	if (!LittleFS.begin()) {
+	g_littlefs_available = LittleFS.begin();
+	if (!g_littlefs_available) {
 		Serial.println("LittleFS mount failed, formatting...");
 		LittleFS.format();
-		LittleFS.begin();
+		g_littlefs_available = LittleFS.begin();
 	}
-	Serial.println("LittleFS initialized");
+	if (g_littlefs_available) {
+		Serial.println("LittleFS initialized");
+	} else {
+		Serial.println("LittleFS not available (FS size may be 0)");
+	}
 
 	// Initialize GB emulator and switch to GB mode
 	if (initGBEmulator()) {

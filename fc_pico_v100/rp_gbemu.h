@@ -29,6 +29,39 @@
 // Maximum cart RAM size (128KB)
 #define GB_CART_RAM_MAX_SIZE (128 * 1024)
 
+// Save state constants
+#define FCPICO_STATE_MAGIC "FCPGB01"
+#define FCPICO_STATE_VERSION 1
+#define ROM_HEADER_START 0x0134
+#define ROM_HEADER_SIZE 28
+
+// Save state header structure
+#pragma pack(push, 1)
+struct SaveStateHeader {
+    char magic[8];           // "FCPGB01\0"
+    uint16_t version;        // Format version
+    uint16_t gb_struct_size; // sizeof(gb_s) for validation
+    uint16_t cart_ram_size;  // Cart RAM size for validation
+    uint16_t reserved;       // Reserved for future use
+};
+#pragma pack(pop)
+
+// Save state error codes
+enum StateResult {
+    STATE_OK = 0,
+    STATE_ERR_NOT_INIT,
+    STATE_ERR_NO_FS,
+    STATE_ERR_FILE_OPEN,
+    STATE_ERR_FILE_WRITE,
+    STATE_ERR_FILE_READ,
+    STATE_ERR_WRONG_ROM,
+    STATE_ERR_VERSION,
+    STATE_ERR_CORRUPTED
+};
+
+// LittleFS availability flag (set during initialization)
+extern bool g_littlefs_available;
+
 // FC key to GB joypad mapping
 // FC:  A=0x80, B=0x40, SEL=0x20, RUN=0x10, UP=0x08, DOWN=0x04, LEFT=0x02, RIGHT=0x01
 // GB:  A=0x01, B=0x02, SEL=0x04, START=0x08, RIGHT=0x10, LEFT=0x20, UP=0x40, DOWN=0x80
@@ -64,9 +97,16 @@ public:
     void markSaveDirty() { m_save_dirty = true; }
     bool isSaveDirty() { return m_save_dirty; }
 
+    // Save state management
+    bool saveState();
+    bool loadState();
+    StateResult getLastStateError() { return m_last_state_error; }
+
 private:
     // Generate save file path from ROM title
     void generateSavePath();
+    // Generate state file path from ROM title
+    void generateStatePath();
 
     bool m_initialized;
     uint8_t m_frame_buffer[GB_LCD_WIDTH * GB_LCD_HEIGHT];
@@ -76,7 +116,9 @@ private:
     uint32_t m_cart_ram_size;
     char m_rom_title[17];
     char m_save_path[32];
+    char m_state_path[32];
     bool m_save_dirty;
+    StateResult m_last_state_error;
 };
 
 extern rp_gbemu gbemu;
