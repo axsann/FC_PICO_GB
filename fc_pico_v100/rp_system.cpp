@@ -376,9 +376,6 @@ void rp_system::setKeyUpdate() {
 	m_key_old = m_key_new;
 	m_key_new = m_key_imp;
 	m_key_trg =  (m_key_new ^ m_key_old) & m_key_new;
-//	if ( m_key_new != m_key_old ) {
-//		Serial.printf("setKeyData %02x %02x %02x\n", m_key_new, m_key_old, m_key_trg );
-//	}
 }
 
 

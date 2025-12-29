@@ -876,7 +876,26 @@ uint8_t __gb_read(struct gb_s *gb, uint16_t addr)
 
 		/* HRAM */
 		if(addr >= IO_ADDR)
+		{
+			/* Joypad register - compute at read time */
+			if(addr == 0xFF00)
+			{
+				uint8_t p1_val = gb->hram_io[IO_JOYP] & 0x30;
+				uint8_t joypad_val = gb->direct.joypad;
+				uint8_t result = 0x0F;
+
+				/* If D-Pad selection line is low, AND the D-pad state */
+				if((p1_val & 0x10) == 0)
+					result &= (joypad_val >> 4) & 0x0F;
+
+				/* If Action button selection line is low, AND the button state */
+				if((p1_val & 0x20) == 0)
+					result &= joypad_val & 0x0F;
+
+				return 0xC0 | p1_val | result;
+			}
 			return gb->hram_io[addr - IO_ADDR];
+		}
 	}
 
 

@@ -161,21 +161,15 @@ void rp_gbemu::reset() {
 void rp_gbemu::setJoypad(uint8_t fc_key) {
     if (!m_initialized) return;
 
-    uint8_t gb_pad = 0;
-
-    if (fc_key & 0x80) gb_pad |= JOYPAD_A;
-    if (fc_key & 0x40) gb_pad |= JOYPAD_B;
-    if (fc_key & 0x20) gb_pad |= JOYPAD_SELECT;
-    if (fc_key & 0x10) gb_pad |= JOYPAD_START;
-    if (fc_key & 0x08) gb_pad |= JOYPAD_UP;
-    if (fc_key & 0x04) gb_pad |= JOYPAD_DOWN;
-    if (fc_key & 0x02) gb_pad |= JOYPAD_LEFT;
-    if (fc_key & 0x01) gb_pad |= JOYPAD_RIGHT;
-
-    // Invert for Peanut-GB (expects active-low)
-    gb_pad ^= 0xFF;
-
-    gb.direct.joypad = gb_pad;
+    // Use bitfield (active-low: 0=pressed, 1=released)
+    gb.direct.joypad_bits.a      = !(fc_key & 0x80);
+    gb.direct.joypad_bits.b      = !(fc_key & 0x40);
+    gb.direct.joypad_bits.select = !(fc_key & 0x20);
+    gb.direct.joypad_bits.start  = !(fc_key & 0x10);
+    gb.direct.joypad_bits.up     = !(fc_key & 0x08);
+    gb.direct.joypad_bits.down   = !(fc_key & 0x04);
+    gb.direct.joypad_bits.left   = !(fc_key & 0x02);
+    gb.direct.joypad_bits.right  = !(fc_key & 0x01);
 }
 
 //=================================================
