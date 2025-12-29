@@ -9,12 +9,15 @@
 #include "Arduino.h"
 #include <LittleFS.h>
 
+// GB APU module (must be before peanut_gb.h for audio_read/audio_write)
+#include "rp_gbapu.h"
+
 // Peanut-GB configuration - must be before including peanut_gb.h
 #define PEANUT_GB_IS_LITTLE_ENDIAN 1
-#define ENABLE_SOUND 0
+#define ENABLE_SOUND 1
 #define ENABLE_LCD 1
 #define PEANUT_GB_12_COLOUR 0  // 4-color mode for FC compatibility
-#define PEANUT_GB_HIGH_LCD_ACCURACY 0  // Reduce for performance
+#define PEANUT_GB_HIGH_LCD_ACCURACY 1  // Enable for better LCD emulation
 
 // GB screen dimensions
 #define GB_LCD_WIDTH  160
@@ -88,6 +91,12 @@ public:
     // Check if emulator is initialized
     bool isInitialized() { return m_initialized; }
 
+    // Get FC palette for current game (4 colors)
+    uint8_t* getFcPalette() { return m_fc_palette; }
+
+    // Check if game has specific palette (not DMG green)
+    bool hasGamePalette() { return m_has_game_palette; }
+
     // ROM info
     const char* getRomTitle() { return m_rom_title; }
 
@@ -119,6 +128,8 @@ private:
     char m_state_path[32];
     bool m_save_dirty;
     StateResult m_last_state_error;
+    uint8_t m_fc_palette[4];  // FC palette indices for current game
+    bool m_has_game_palette;  // true if game has specific palette
 };
 
 extern rp_gbemu gbemu;

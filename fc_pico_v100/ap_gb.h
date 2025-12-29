@@ -38,10 +38,15 @@ private:
     // Draw status message
     void drawStatusMessage();
 
+    // Apply current palette to FC
+    void applyPalette();
+
     uint8_t m_sub_state;
     uint16_t m_frame_count;
     StatusMessage m_status_message;
     uint8_t m_status_display_frames;  // Frames remaining to show message
+    uint8_t m_palette_mode;          // 0=Game, 1=DMG green, 2=Mono
+    uint8_t m_prev_key;              // Previous key state for edge detection
 };
 
 extern ap_gb ap_g_gb;

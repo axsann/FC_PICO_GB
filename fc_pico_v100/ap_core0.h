@@ -87,6 +87,7 @@ void init_timer_callback() {
 
 // Include embedded ROM data
 #include "res/gbrom.c"
+#include "rp_gbapu.h"
 
 // Initialize GB emulator with embedded ROM
 bool initGBEmulator() {
@@ -105,6 +106,10 @@ bool initGBEmulator() {
 		return false;
 	}
 
+	// Initialize GB APU to NES APU mapping
+	gbapu.init();
+	Serial.println("GB APU initialized");
+
 	Serial.println("GB emulator OK");
 	return true;
 }
@@ -112,6 +117,16 @@ bool initGBEmulator() {
 #endif // GB_EMU_MODE
 
 void setup() {
+	// Overclock to 276MHz for smooth GB emulation (Pico 2)
+	{
+		const unsigned vco = 1656 * 1000 * 1000;  // 276MHz
+		const unsigned div1 = 6, div2 = 1;
+
+		vreg_set_voltage(VREG_VOLTAGE_1_15);
+		sleep_ms(2);
+		set_sys_clock_pll(vco, div1, div2);
+		sleep_ms(2);
+	}
 
 	Serial.begin(115200);
 	sleep_ms(1800);

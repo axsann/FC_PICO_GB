@@ -4,6 +4,7 @@
 */
 
 #include "rp_gbemu.h"
+#include "rp_gbpalette.h"
 #include "Canvas.h"
 
 // Include Peanut-GB implementation
@@ -21,6 +22,9 @@ bool g_littlefs_available = false;
 // Peanut-GB context
 static struct gb_s gb;
 
+// ROM Bank 0 cache (64KB) for faster access
+static uint8_t rom_bank0[65536];
+
 // Private data for Peanut-GB callbacks
 struct gb_priv_s {
     uint8_t* rom;
@@ -34,6 +38,10 @@ static struct gb_priv_s gb_priv;
 //=================================================
 
 uint8_t gb_rom_read(struct gb_s* gb, const uint_fast32_t addr) {
+    // Use cached ROM bank 0 for faster access
+    if (addr < 65536) {
+        return rom_bank0[addr];
+    }
     struct gb_priv_s* priv = (struct gb_priv_s*)gb->direct.priv;
     return priv->rom[addr];
 }
@@ -81,6 +89,12 @@ rp_gbemu::rp_gbemu() {
     memset(m_state_path, 0, sizeof(m_state_path));
     m_save_dirty = false;
     m_last_state_error = STATE_OK;
+    // Default grayscale palette
+    m_fc_palette[0] = 0x0F;  // Black
+    m_fc_palette[1] = 0x00;  // Dark Gray
+    m_fc_palette[2] = 0x10;  // Light Gray
+    m_fc_palette[3] = 0x30;  // White
+    m_has_game_palette = false;
 }
 
 bool rp_gbemu::init(const uint8_t* rom_data, uint32_t rom_size) {
@@ -92,6 +106,10 @@ bool rp_gbemu::init(const uint8_t* rom_data, uint32_t rom_size) {
     // Store ROM pointer
     m_rom = (uint8_t*)rom_data;
     m_rom_size = rom_size;
+
+    // Cache first 64KB of ROM for faster access
+    uint32_t cache_size = (rom_size < 65536) ? rom_size : 65536;
+    memcpy(rom_bank0, rom_data, cache_size);
 
     // Allocate cart RAM
     m_cart_ram_size = GB_CART_RAM_MAX_SIZE;
@@ -140,6 +158,15 @@ bool rp_gbemu::init(const uint8_t* rom_data, uint32_t rom_size) {
         m_rom_title[i] = c;
     }
     m_rom_title[16] = '\0';
+
+    // Get game-specific FC palette using ROM checksum
+    uint8_t checksum = m_rom[0x014D];
+    getFcPaletteForChecksum(checksum, m_fc_palette);
+    m_has_game_palette = ::hasGamePalette(checksum);
+
+    Serial.printf("Game: %s, Checksum: 0x%02X\n", m_rom_title, checksum);
+    Serial.printf("FC Palette: 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
+                  m_fc_palette[0], m_fc_palette[1], m_fc_palette[2], m_fc_palette[3]);
 
     // Generate save path and load save data
     generateSavePath();

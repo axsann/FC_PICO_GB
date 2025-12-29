@@ -176,6 +176,16 @@ void rp_system::init2() {
 	initVram();
 
 	initFC_COM_BUF();
+	m_apuSupported = false;	// FC ROM から APU 対応通知を受け取るまで false
+
+	// APU レジスタバッファ初期化 (無音状態で開始)
+	memset(m_apuRegLatest, 0, sizeof(m_apuRegLatest));
+	m_apuRegLatest[0x00] = 0x30;  // $4000: Pulse1 音量=0, LC halt
+	m_apuRegLatest[0x04] = 0x30;  // $4004: Pulse2 音量=0, LC halt
+	m_apuRegLatest[0x08] = 0x00;  // $4008: Triangle リニアカウンタ=0
+	m_apuRegLatest[0x0C] = 0x30;  // $400C: Noise 音量=0, LC halt
+	m_apuRegLatest[0x15] = 0x0F;  // $4015: 全チャンネル有効
+
 
 	m_fade_wait = 0;
 
@@ -252,8 +262,49 @@ bool rp_system::setPF_VRAM( uint16_t vadr, uint8_t dt ) {
 //		サウンド関連
 //=================================================
 void rp_system::playSE( uint8_t seno ) {
-	FC_COM_BUF[0] = seno;	
+	FC_COM_BUF[0] = seno;
 }
+
+
+//=================================================
+//		APU コマンド関連
+//=================================================
+
+void rp_system::queueApuWrite(uint8_t reg, uint8_t value) {
+	if (reg >= APU_REG_COUNT) return;
+	m_apuRegLatest[reg] = value;
+}
+
+void rp_system::sendApuCommands() {
+	// APU非対応ROMの場合は送信しない
+	if (!m_apuSupported) {
+		return;
+	}
+
+	// FC_COM_BUF に APU データを固定順序で書き込み (16バイト全体を使用)
+	// フォーマット: マジック(1) + レジスタ値(15)
+	// FC ROM 側では FC_COM_BUF[0] == 0xA5 かつ FC_COM_BUF[1] != 0xFC で APU と判別
+	// (通常コマンドでは FC_COM_BUF[1] = PF_MAGIC_NO (0xFC))
+	// $400C を [1] に配置 (上位2ビットが常に0なので 0xFC にならない)
+	// $4015 を [15] に配置 (最後に書き込むことで確実にチャンネル有効/無効を制御)
+	FC_COM_BUF[0]  = 0xA5;                    // APU マジックバイト
+	FC_COM_BUF[1]  = m_apuRegLatest[0x0C];   // $400C: Noise Vol (0xFC と衝突しない)
+	FC_COM_BUF[2]  = m_apuRegLatest[0x0E];   // $400E: Noise Mode/Period
+	FC_COM_BUF[3]  = m_apuRegLatest[0x0F];   // $400F: Noise Length
+	FC_COM_BUF[4]  = m_apuRegLatest[0x00];   // $4000: Pulse1 Duty/Vol
+	FC_COM_BUF[5]  = m_apuRegLatest[0x01];   // $4001: Pulse1 Sweep
+	FC_COM_BUF[6]  = m_apuRegLatest[0x02];   // $4002: Pulse1 Freq Lo
+	FC_COM_BUF[7]  = m_apuRegLatest[0x03];   // $4003: Pulse1 Freq Hi
+	FC_COM_BUF[8]  = m_apuRegLatest[0x04];   // $4004: Pulse2 Duty/Vol
+	FC_COM_BUF[9]  = m_apuRegLatest[0x05];   // $4005: Pulse2 Sweep
+	FC_COM_BUF[10] = m_apuRegLatest[0x06];   // $4006: Pulse2 Freq Lo
+	FC_COM_BUF[11] = m_apuRegLatest[0x07];   // $4007: Pulse2 Freq Hi
+	FC_COM_BUF[12] = m_apuRegLatest[0x08];   // $4008: Triangle Linear
+	FC_COM_BUF[13] = m_apuRegLatest[0x0A];   // $400A: Triangle Freq Lo
+	FC_COM_BUF[14] = m_apuRegLatest[0x0B];   // $400B: Triangle Freq Hi
+	FC_COM_BUF[15] = m_apuRegLatest[0x15];   // $4015: Status/Enable (最後に書き込み)
+}
+
 
 
 //=================================================
@@ -295,8 +346,10 @@ void rp_system::convVram() {
 }
 
 void rp_system::update(void) {
+	// バッファをリセット
+	initFC_COM_BUF();
 
-	// PAL update
+	// PAL update (他コマンド優先)
 	for( int i=0 ; i<0x20 ; i++ ) {
 		uint8_t at = m_PAL_W[i];
 		if ( at != m_PAL_W_old[i] ) {
@@ -304,7 +357,6 @@ void rp_system::update(void) {
 				break;
 			}
 			m_PAL_W_old[i] = at;
-			//Serial.printf("setPF_VRAM_PAL %02x,%02x\n", i, at );
 		}
 	}
 
@@ -319,6 +371,12 @@ void rp_system::update(void) {
 		}
 	}
 
+	// 他コマンドがなければ APU データを送信
+	// FC_COM_BUF[0] == 0: SE番号なし
+	// m_FC_COM_IDX == 2: コマンド追加なし
+	if (FC_COM_BUF[0] == 0 && m_FC_COM_IDX == 2) {
+		sendApuCommands();
+	}
 
 	convVram();
 }
@@ -343,11 +401,11 @@ void rp_system::ppu_dma(void) {
 	if ( (ppu_count >= (PPU_COUNT_VAL -2) ) && (ppu_count <= PPU_COUNT_VAL ) )  {
 		vram_dma.TransSM_DMA( vram_buf, VRAM_BUF_SIZE );
 		if ( ppu_count == (PPU_COUNT_VAL -2) ) {
-			pio_sm_exec( pio0, SM_TRAN, 0x6008 );  // out    pins, 8                    
-			pio_sm_exec( pio0, SM_TRAN, 0x6008 );  // out    pins, 8                    
+			pio_sm_exec( pio0, SM_TRAN, 0x6008 );  // out    pins, 8
+			pio_sm_exec( pio0, SM_TRAN, 0x6008 );  // out    pins, 8
 		}
 		if ( ppu_count == (PPU_COUNT_VAL -1) ) {
-			pio_sm_exec( pio0, SM_TRAN, 0x6008 );  // out    pins, 8                    
+			pio_sm_exec( pio0, SM_TRAN, 0x6008 );  // out    pins, 8
 		}
 #if 1
 		// フレームデータの最後にコマンドをセット
@@ -359,12 +417,12 @@ void rp_system::ppu_dma(void) {
 		vram_dma.StopDMA();
 	}
 
-/*
+#if 0  // Debug: ppu_count
 	if ( ppu_count != ppu_count_old ) {
-		Serial.printf("ppu_count:%d\n", ppu_count );
+		Serial.printf("ppu_count:%d (expected:%d)\n", ppu_count, PPU_COUNT_VAL );
 		ppu_count_old = ppu_count;
 	}
-*/
+#endif
 
 }
 
@@ -402,6 +460,13 @@ void rp_system::jobRcvCom() {
 		Serial.printf("FP_COM_ROM:%02x\n", dt );
 		WDT_update();
 		rom_dma( dt );
+		break;
+
+	case 0x05:	// APU対応ROM通知 (パッチ済みROMから毎フレーム送信)
+		if (!m_apuSupported) {
+			Serial.println("APU supported ROM detected");
+			m_apuSupported = true;
+		}
 		break;
 
 	case FP_COM_LOG:	// ログ表示

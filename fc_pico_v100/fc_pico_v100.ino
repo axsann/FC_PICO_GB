@@ -10,6 +10,9 @@
 #include "pico/multicore.h"
 #include "hardware/pio.h"
 #include "hardware/dma.h"
+#include "hardware/vreg.h"
+#include "hardware/clocks.h"
+#include "hardware/pll.h"
 #include "pio/fcppu.pio.h"
 
 #include "rp_system.h"

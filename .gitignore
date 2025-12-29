@@ -7,6 +7,8 @@ fc_pico_v100/build/
 *.gb
 *.gbc
 *.nes
+!fc_rom/rom_original.nes
+!fc_rom/rom_patched.nes
 *.sav
 
 # macOS

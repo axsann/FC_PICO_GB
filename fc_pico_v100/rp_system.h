@@ -72,7 +72,6 @@ enum{
 	PF_COM_FDOT = 3,		// フェードアウト	処理終了　FP_COM_ACK
 
 	PF_COM_SE   = 0x80,		// SEセット:0x80 + SE_NO
-	PF_COM_BGM  = 0xA0,		// BGMセット:BGM_NO
 	PF_COM_VRAM = 0xC0,		// VRAM 書き換え:adrH,ardL,dt
 
 
@@ -175,8 +174,6 @@ enum{
 #define MICROS_1S  (1000*1000)
 #define MICROS_1MS  (1000)
 
-
-//#define FC_COM_BUF_SIZE	8
 #define FC_COM_BUF_SIZE	16
 
 
@@ -213,6 +210,11 @@ public:
 	void SleepMS( int ms );
 
     void playSE( uint8_t seno );
+
+	// APU コマンド関数
+	void queueApuWrite(uint8_t reg, uint8_t value);
+	void sendApuCommands();
+
 
 	void setKeyData( uint8_t key ) { m_key_imp = key; }
 	void setKeyUpdate();
@@ -269,6 +271,14 @@ private:
 
 	uint8_t FC_COM_BUF[ FC_COM_BUF_SIZE ];
 	uint8_t m_FC_COM_IDX;
+
+	bool m_apuSupported;	// FC ROM が APU 対応かどうか
+
+	// APU レジスタバッファ
+	static const int APU_REG_COUNT = 24;  // $4000-$4017
+	uint8_t m_apuRegLatest[APU_REG_COUNT];
+
+
 	uint32_t vram_buf0[VRAM_BUF_SIZE];
 	uint32_t vram_buf1[VRAM_BUF_SIZE];	// バックバッファ
 

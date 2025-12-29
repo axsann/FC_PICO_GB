@@ -2,6 +2,12 @@
 
 FC PICO GB プロジェクトの開発ガイドラインです。
 
+## ⚠️ 重要: コミット禁止ファイル
+
+**`fc_pico_v100/res/gbrom.c` は絶対に git add やコミットしてはいけません。**
+
+現在リポジトリにはフリーソフトの ROM が含まれていますが、開発中にユーザーが別のゲームに差し替える可能性があります。誤って著作権で保護されたゲーム ROM をコミットしないよう、このファイルは常にコミット対象から除外してください。
+
 ## プロジェクト概要
 
 FC PICO 上で動作する Game Boy エミュレーターです。Raspberry Pi Pico 2 をファミコンのカートリッジスロットに接続し、ファミコンの PPU を利用して Game Boy ゲームを表示します。
@@ -92,8 +98,68 @@ gb.direct.joypad = gb_pad;
 ## ROM 変更
 
 ```bash
-python3 tools/rom2c.py your_game.gb res/gbrom.c
+python3 fc_pico_v100/tools/rom2c.py your_game.gb fc_pico_v100/res/gbrom.c
 ```
+
+## サウンド機能 (FC_COM_BUF 方式)
+
+GB APU の音声を NES APU にマッピングして出力します。FC ROM にパッチを当てる必要があります。
+
+### パッチ手順
+
+```bash
+cd fc_rom
+
+# 1. ROM にパッチを適用
+python3 patch_apu.py
+# 出力: rom_patched.nes
+
+# 2. パッチ済み ROM を C ファイルに変換
+python3 rom_to_c.py rom_patched.nes ../fc_pico_v100/res/rom.c
+
+# 3. Pico を再ビルド
+```
+
+### 関連ファイル
+
+- `fc_rom/patch_apu.py` - APU コマンド処理を FC ROM に追加
+- `fc_rom/rom_to_c.py` - NES ROM を C 配列に変換
+- `fc_pico_v100/rp_gbapu.*` - GB APU → NES APU マッピング
+- `fc_pico_v100/rp_system.*` - FC_COM_BUF 経由で APU データ送信
+- `fc_pico_v100/res/rom.c` - パッチ済み FC ROM データ
+
+### 技術詳細
+
+**データフロー:**
+1. `rp_gbapu`: GB APU レジスタ書き込みをフック、NES APU 形式に変換
+2. `rp_system::queueApuWrite()`: APU レジスタ値を `m_apuRegLatest[]` に保存
+3. `rp_system::sendApuCommands()`: FC_COM_BUF ($40-$4F) に APU データを書き込み
+4. FC ROM: 毎フレーム FC_COM_BUF をチェック、マジックバイト確認後 APU レジスタに書き込み
+
+**APU データフォーマット (FC_COM_BUF $40-$4F、16 バイト固定順序):**
+```
+$40: 0xA5 (マジックバイト)
+$41: $400C 値 (Noise Volume) ※ 上位2ビットが常に0なので 0xFC と衝突しない
+$42: $400E 値 (Noise Mode/Period)
+$43: $400F 値 (Noise Length)
+$44: $4000 値 (Pulse1 Duty/Volume)
+$45: $4001 値 (Pulse1 Sweep)
+$46: $4002 値 (Pulse1 Freq Lo)
+$47: $4003 値 (Pulse1 Freq Hi)
+$48: $4004 値 (Pulse2 Duty/Volume)
+$49: $4005 値 (Pulse2 Sweep)
+$4A: $4006 値 (Pulse2 Freq Lo)
+$4B: $4007 値 (Pulse2 Freq Hi)
+$4C: $4008 値 (Triangle Linear)
+$4D: $400A 値 (Triangle Freq Lo)
+$4E: $400B 値 (Triangle Freq Hi)
+$4F: $4015 値 (APU Status/Enable) ※ 最後に書き込むことでチャンネル有効/無効を確実に制御
+```
+
+**利点:**
+- 全 15 APU レジスタを毎フレーム送信可能
+- PPU ($2006/$2007) を使用しないため画面に影響なし
+- ゼロページアクセスで高速
 
 ## デバッグ
 
