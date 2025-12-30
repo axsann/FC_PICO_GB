@@ -11,11 +11,7 @@
 enum StatusMessage {
     STATUS_NONE = 0,
     STATUS_RAM_SAVED,
-    STATUS_STATE_SAVED,
-    STATUS_STATE_LOADED,
-    STATUS_STATE_NO_DATA,
-    STATUS_STATE_NO_FS,
-    STATUS_STATE_ERROR
+    STATUS_NO_FS
 };
 
 class ap_gb {

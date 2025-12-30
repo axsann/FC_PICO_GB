@@ -76,33 +76,12 @@ void ap_gb::main() {
 
     // SELECT is held - check for button combinations
     if (key_now & 0x20) {
-        // SELECT + A (just pressed): Save state
-        if (key_trg & 0x80) {
-            if (gbemu.saveState()) {
-                m_status_message = STATUS_STATE_SAVED;
-            } else if (gbemu.getLastStateError() == STATE_ERR_NO_FS) {
-                m_status_message = STATUS_STATE_NO_FS;
-            } else {
-                m_status_message = STATUS_STATE_ERROR;
-            }
-            m_status_display_frames = 60;
-        }
-        // SELECT + B (just pressed): Load state
-        else if (key_trg & 0x40) {
-            if (gbemu.loadState()) {
-                m_status_message = STATUS_STATE_LOADED;
-            } else if (gbemu.getLastStateError() == STATE_ERR_NO_FS) {
-                m_status_message = STATUS_STATE_NO_FS;
-            } else if (gbemu.getLastStateError() == STATE_ERR_FILE_OPEN) {
-                m_status_message = STATUS_STATE_NO_DATA;
-            } else {
-                m_status_message = STATUS_STATE_ERROR;
-            }
-            m_status_display_frames = 60;
-        }
         // SELECT + START (just pressed): Save RAM
-        else if (key_trg & 0x10) {
-            if (gbemu.isSaveDirty()) {
+        if (key_trg & 0x10) {
+            if (!g_littlefs_available) {
+                m_status_message = STATUS_NO_FS;
+                m_status_display_frames = 60;
+            } else if (gbemu.isSaveDirty()) {
                 gbemu.saveSave();
                 m_status_message = STATUS_RAM_SAVED;
                 m_status_display_frames = 60;
@@ -226,24 +205,8 @@ void ap_gb::drawStatusMessage() {
             text = "SAVED";
             start_x = GB_OFFSET_X + 60;  // (160 - 5*8) / 2 = 60
             break;
-        case STATUS_STATE_SAVED:
-            text = "STATE SAVED";
-            start_x = GB_OFFSET_X + 36;  // (160 - 11*8) / 2 = 36
-            break;
-        case STATUS_STATE_LOADED:
-            text = "STATE LOADED";
-            start_x = GB_OFFSET_X + 32;  // (160 - 12*8) / 2 = 32
-            break;
-        case STATUS_STATE_NO_DATA:
-            text = "NO DATA";
-            start_x = GB_OFFSET_X + 52;  // (160 - 7*8) / 2 = 52
-            break;
-        case STATUS_STATE_NO_FS:
+        case STATUS_NO_FS:
             text = "NO FS";
-            start_x = GB_OFFSET_X + 60;  // (160 - 5*8) / 2 = 60
-            break;
-        case STATUS_STATE_ERROR:
-            text = "ERROR";
             start_x = GB_OFFSET_X + 60;  // (160 - 5*8) / 2 = 60
             break;
         default:
