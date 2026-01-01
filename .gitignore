@@ -1,7 +1,7 @@
 # FC PICO GB - .gitignore
 
 # Build outputs
-fc_pico_v100/build/
+fc_pico_gb/build/
 
 # ROM files (use res/gbrom.c for embedded ROM)
 *.gb

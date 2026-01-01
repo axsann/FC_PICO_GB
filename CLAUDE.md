@@ -4,7 +4,7 @@ FC PICO GB プロジェクトの開発ガイドラインです。
 
 ## ⚠️ 重要: コミット禁止ファイル
 
-**`fc_pico_v100/res/gbrom.c` は絶対に git add やコミットしてはいけません。**
+**`fc_pico_gb/res/gbrom.c` は絶対に git add やコミットしてはいけません。**
 
 現在リポジトリにはフリーソフトの ROM が含まれていますが、開発中にユーザーが別のゲームに差し替える可能性があります。誤って著作権で保護されたゲーム ROM をコミットしないよう、このファイルは常にコミット対象から除外してください。
 
@@ -16,7 +16,7 @@ FC PICO 上で動作する Game Boy エミュレーターです。Raspberry Pi P
 
 ```bash
 # Arduino IDE を使用
-# 1. fc_pico_v100/fc_pico_v100.ino を開く
+# 1. fc_pico_gb/fc_pico_gb.ino を開く
 # 2. ボード設定: Raspberry Pi Pico 2
 # 3. Upload ボタン (→) または Sketch → Upload
 # 4. FC PICO をファミコンに挿入して電源 ON
@@ -25,8 +25,8 @@ FC PICO 上で動作する Game Boy エミュレーターです。Raspberry Pi P
 ## ファイル構成
 
 ```
-fc_pico_v100/
-├── fc_pico_v100.ino    # メインスケッチ、GB_EMU_MODE フラグ
+fc_pico_gb/
+├── fc_pico_gb.ino    # メインスケッチ、GB_EMU_MODE フラグ
 ├── ap_core0.h          # Core0 setup/loop、GB エミュレータ初期化
 ├── rp_system.*         # FC 通信（PIO/DMA）、パレット/属性管理
 ├── rp_gbemu.*          # Peanut-GB ラッパー
@@ -98,7 +98,7 @@ gb.direct.joypad = gb_pad;
 ## ROM 変更
 
 ```bash
-python3 fc_pico_v100/tools/rom2c.py your_game.gb fc_pico_v100/res/gbrom.c
+python3 fc_pico_gb/tools/rom2c.py your_game.gb fc_pico_gb/res/gbrom.c
 ```
 
 ## サウンド機能 (FC_COM_BUF 方式)
@@ -115,7 +115,7 @@ python3 patch_apu.py
 # 出力: rom_patched.nes
 
 # 2. パッチ済み ROM を C ファイルに変換
-python3 rom_to_c.py rom_patched.nes ../fc_pico_v100/res/rom.c
+python3 rom_to_c.py rom_patched.nes ../fc_pico_gb/res/rom.c
 
 # 3. Pico を再ビルド
 ```
@@ -124,9 +124,9 @@ python3 rom_to_c.py rom_patched.nes ../fc_pico_v100/res/rom.c
 
 - `fc_rom/patch_apu.py` - APU コマンド処理を FC ROM に追加
 - `fc_rom/rom_to_c.py` - NES ROM を C 配列に変換
-- `fc_pico_v100/rp_gbapu.*` - GB APU → NES APU マッピング
-- `fc_pico_v100/rp_system.*` - FC_COM_BUF 経由で APU データ送信
-- `fc_pico_v100/res/rom.c` - パッチ済み FC ROM データ
+- `fc_pico_gb/rp_gbapu.*` - GB APU → NES APU マッピング
+- `fc_pico_gb/rp_system.*` - FC_COM_BUF 経由で APU データ送信
+- `fc_pico_gb/res/rom.c` - パッチ済み FC ROM データ
 
 ### 技術詳細
 

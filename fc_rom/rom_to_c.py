@@ -7,7 +7,7 @@ NES ROM を C 配列に変換するスクリプト
 
 デフォルト:
   入力: rom_apu_32.nes
-  出力: ../fc_pico_v100/res/rom.c
+  出力: ../fc_pico_gb/res/rom.c
 """
 
 import sys
@@ -46,7 +46,7 @@ def main():
 
     # デフォルト値
     input_path = os.path.join(script_dir, "rom_apu_compact.nes")
-    output_path = os.path.join(script_dir, "..", "fc_pico_v100", "res", "rom.c")
+    output_path = os.path.join(script_dir, "..", "fc_pico_gb", "res", "rom.c")
 
     # 引数処理
     if len(sys.argv) >= 2:

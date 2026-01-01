@@ -79,7 +79,7 @@ Arduino IDE で以下の設定が必要です：
 
 | ファイル | 役割 |
 |----------|------|
-| `fc_pico_v100.ino` | メインスケッチ、`GB_EMU_MODE` フラグ定義 |
+| `fc_pico_gb.ino` | メインスケッチ、`GB_EMU_MODE` フラグ定義 |
 | `ap_core0.h` | Core0 の setup/loop、GB エミュレータ初期化 |
 | `rp_gbemu.cpp/h` | Peanut-GB ラッパークラス |
 | `ap_gb.cpp/h` | GB 画面ハンドラ（FC への描画処理） |
@@ -91,7 +91,7 @@ Arduino IDE で以下の設定が必要です：
 
 **起動時:**
 ```
-fc_pico_v100.ino → ap_core0.h::setup()
+fc_pico_gb.ino → ap_core0.h::setup()
     → initGBEmulator()    ... gbrom.c から ROM 読み込み
     → gbemu.init()        ... Peanut-GB 初期化
     → ap.setStep(ST_GB)   ... GB モードに遷移
@@ -192,7 +192,7 @@ Game Boy の音声を NES APU で再生します。
 
 ### 1. Arduino IDE で書き込み
 
-1. Arduino IDE で `fc_pico_v100/fc_pico_v100.ino` を開く
+1. Arduino IDE で `fc_pico_gb/fc_pico_gb.ino` を開く
 2. ボード設定: Raspberry Pi Pico 2
 3. **Tools → Flash Size**: 「4MB (Sketch: 3.5MB, FS: 512KB)」を選択（セーブデータ用、約15個）
    - セーブ領域を多めにしたい場合は「4MB (Sketch: 3MB, FS: 1MB)」を選択（約30個）
@@ -220,7 +220,7 @@ Tobu Tobu Girl はオープンソースの Game Boy ゲームで、再配布が�
 ### 他の ROM を使用する場合
 
 ```bash
-python3 fc_pico_v100/tools/rom2c.py your_game.gb fc_pico_v100/res/gbrom.c
+python3 fc_pico_gb/tools/rom2c.py your_game.gb fc_pico_gb/res/gbrom.c
 ```
 
 ※ 市販ゲームの ROM は各自で用意してください。
