@@ -629,8 +629,11 @@ void rp_gbapu::updatePulse1() {
     (void)originalDuty;  // unused now
     duty = 2;  // Always 50%
 
+    // Volume adjustment: reduce to 93.75% (15/16) for better balance
+    uint8_t nesVolume = (volume * 15) / 16;
+
     // NES $4000: DDLC VVVV
-    uint8_t reg4000 = (duty << 6) | 0x30 | volume;
+    uint8_t reg4000 = (duty << 6) | 0x30 | nesVolume;
     queueApuWrite(0x00, reg4000);
 
     // NES $4002: Period low (no side effects, safe to update every frame)
@@ -669,8 +672,11 @@ void rp_gbapu::updatePulse2() {
     (void)originalDuty;  // unused now
     duty = 2;  // Always 50%
 
+    // Volume adjustment: reduce to 93.75% (15/16) for better balance
+    uint8_t nesVolume = (volume * 15) / 16;
+
     // NES $4004: DDLC VVVV
-    uint8_t reg4004 = (duty << 6) | 0x30 | volume;
+    uint8_t reg4004 = (duty << 6) | 0x30 | nesVolume;
     queueApuWrite(0x04, reg4004);
 
     // NES $4006: Period low (no side effects, safe to update every frame)
@@ -764,8 +770,11 @@ void rp_gbapu::updateNoise() {
     // Higher period index = lower frequency = less harsh
     if (nesPeriod < 14) nesPeriod += 2;
 
+    // Volume adjustment: reduce to 93.75% (15/16) for better balance
+    uint8_t nesVolume = (volume * 15) / 16;
+
     // NES $400C: --LC VVVV
-    queueApuWrite(0x0C, 0x30 | volume);
+    queueApuWrite(0x0C, 0x30 | nesVolume);
 
     // NES $400E: M--- PPPP
     queueApuWrite(0x0E, nesMode | (nesPeriod & 0x0F));
