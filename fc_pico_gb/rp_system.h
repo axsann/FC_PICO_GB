@@ -213,7 +213,11 @@ public:
 
 	// APU コマンド関数
 	void queueApuWrite(uint8_t reg, uint8_t value);
-	void sendApuCommands();
+	void sendApuCommands();        // Full APU update (0xAx)
+	void sendApuSilence();         // Quick silence (0xC0)
+	void sendApuPerChannel(uint8_t channel, bool writeReg3);  // Per-channel update (0xBx)
+	void resetApuWriteFlags();     // Reset write flags at start of each frame
+	void resetApuState();          // Reset APU state for new track
 
 
 	void setKeyData( uint8_t key ) { m_key_imp = key; }
@@ -277,6 +281,14 @@ private:
 	// APU レジスタバッファ
 	static const int APU_REG_COUNT = 24;  // $4000-$4017
 	uint8_t m_apuRegLatest[APU_REG_COUNT];
+
+	// APU 書き込み追跡フラグ (フレームごとにリセット)
+	// $4003/$4007/$400B/$400F は書き込み時のみ FC に送信 (位相リセット回避)
+	uint8_t m_apuWriteMask;      // 今フレームの書き込みマスク
+	uint8_t m_apuWriteMaskPrev;  // 前フレームの書き込みマスク (連続書き込み検出用)
+
+	// 前回送信したperiod値 (変化検出用)
+	uint8_t m_apuRegPrev[APU_REG_COUNT];
 
 
 	uint32_t vram_buf0[VRAM_BUF_SIZE];

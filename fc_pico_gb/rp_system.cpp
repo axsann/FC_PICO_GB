@@ -186,6 +186,12 @@ void rp_system::init2() {
 	m_apuRegLatest[0x0C] = 0x30;  // $400C: Noise 音量=0, LC halt
 	m_apuRegLatest[0x15] = 0x0F;  // $4015: 全チャンネル有効
 
+	// 前回値を初期化 (初回は全レジスタ書き込みさせるため異なる値に)
+	memset(m_apuRegPrev, 0xFF, sizeof(m_apuRegPrev));
+
+	// APU 書き込みマスク初期化 (初回は全レジスタ書き込み)
+	m_apuWriteMask = 0x0F;  // bit 0=$4003, bit 1=$4007, bit 2=$400B, bit 3=$400F
+
 
 	m_fade_wait = 0;
 
@@ -270,9 +276,44 @@ void rp_system::playSE( uint8_t seno ) {
 //		APU コマンド関連
 //=================================================
 
+// APU コマンドマジック定数
+#define APU_MAGIC_FULL      0xA0  // Full APU Update: 0xA0 | writeMask
+#define APU_MAGIC_PERCHAN   0xB0  // Per-Channel Update: 0xB0 | channel
+#define APU_MAGIC_SILENCE   0xC0  // Quick Silence
+
+// 検証バイト定数 ($41 に埋め込み、$400C の上位2ビットが常に0であることを利用)
+#define APU_CHECK_FULL      0x40  // Full: 上位2ビット = 01 (0x40-0x7F)
+#define APU_CHECK_PERCHAN   0x50  // PerCh: 上位4ビット = 0101 (0x50-0x5F)
+#define APU_CHECK_SILENCE   0x60  // Silence: 固定値
+
 void rp_system::queueApuWrite(uint8_t reg, uint8_t value) {
 	if (reg >= APU_REG_COUNT) return;
+
+	// 位相リセット対象レジスタ: 書き込みがあったことを記録
+	// 値の比較は sendApuCommands() で行う (連続書き込み vs 新規書き込みの判定)
+	switch (reg) {
+		case 0x03: m_apuWriteMask |= 0x01; break;
+		case 0x07: m_apuWriteMask |= 0x02; break;
+		case 0x0B: m_apuWriteMask |= 0x04; break;
+		case 0x0F: m_apuWriteMask |= 0x08; break;
+	}
+
 	m_apuRegLatest[reg] = value;
+}
+
+void rp_system::resetApuWriteFlags() {
+	m_apuWriteMaskPrev = m_apuWriteMask;
+	m_apuWriteMask = 0;
+}
+
+void rp_system::resetApuState() {
+	// 新しいトラック再生時にAPU状態をリセット
+	// これにより変化検出が正しく動作する
+	Serial.println("APU State Reset");
+	memset(m_apuRegLatest, 0, sizeof(m_apuRegLatest));
+	memset(m_apuRegPrev, 0xFF, sizeof(m_apuRegPrev));  // 異なる値で初期化
+	m_apuWriteMask = 0x0F;      // 初回は全レジスタ書き込み
+	m_apuWriteMaskPrev = 0x00;  // 前フレームは書き込みなし扱い
 }
 
 void rp_system::sendApuCommands() {
@@ -281,28 +322,118 @@ void rp_system::sendApuCommands() {
 		return;
 	}
 
-	// FC_COM_BUF に APU データを固定順序で書き込み (16バイト全体を使用)
-	// フォーマット: マジック(1) + レジスタ値(15)
-	// FC ROM 側では FC_COM_BUF[0] == 0xA5 かつ FC_COM_BUF[1] != 0xFC で APU と判別
-	// (通常コマンドでは FC_COM_BUF[1] = PF_MAGIC_NO (0xFC))
-	// $400C を [1] に配置 (上位2ビットが常に0なので 0xFC にならない)
-	// $4015 を [15] に配置 (最後に書き込むことで確実にチャンネル有効/無効を制御)
-	FC_COM_BUF[0]  = 0xA5;                    // APU マジックバイト
-	FC_COM_BUF[1]  = m_apuRegLatest[0x0C];   // $400C: Noise Vol (0xFC と衝突しない)
+	// $4003/$4007/$400B/$400F の書き込み制御:
+	// - 新規書き込み (前フレームでは書かず、今フレームで書いた): 書き込む
+	// - period 変化: 書き込む
+	// - 連続書き込み (毎フレーム書き込むドライバ): スキップ (クリック回避)
+	uint8_t writeMask = 0;
+
+	// Pulse 1: 前フレームで書き込まず今フレームで書き込んだ = 新しいノート
+	bool p1_new_write = (m_apuWriteMask & 0x01) && !(m_apuWriteMaskPrev & 0x01);
+	// Period 比較: $4003 は下位3ビットのみ (bit 3-7 は Length Counter Load でフェーズリセット不要)
+	bool p1_period_changed = (m_apuRegLatest[0x02] != m_apuRegPrev[0x02] ||
+	                          (m_apuRegLatest[0x03] & 0x07) != (m_apuRegPrev[0x03] & 0x07));
+	if (p1_new_write || p1_period_changed) {
+		writeMask |= 0x01;
+	}
+
+	// Pulse 2
+	bool p2_new_write = (m_apuWriteMask & 0x02) && !(m_apuWriteMaskPrev & 0x02);
+	// Period 比較: $4007 は下位3ビットのみ (bit 3-7 は Length Counter Load でフェーズリセット不要)
+	bool p2_period_changed = (m_apuRegLatest[0x06] != m_apuRegPrev[0x06] ||
+	                          (m_apuRegLatest[0x07] & 0x07) != (m_apuRegPrev[0x07] & 0x07));
+	if (p2_new_write || p2_period_changed) {
+		writeMask |= 0x02;
+	}
+
+	// Triangle
+	bool tri_new_write = (m_apuWriteMask & 0x04) && !(m_apuWriteMaskPrev & 0x04);
+	bool tri_period_changed = (m_apuRegLatest[0x0A] != m_apuRegPrev[0x0A] ||
+	                           m_apuRegLatest[0x0B] != m_apuRegPrev[0x0B]);
+	if (tri_new_write || tri_period_changed) {
+		writeMask |= 0x04;
+	}
+
+	// Noise
+	bool noise_new_write = (m_apuWriteMask & 0x08) && !(m_apuWriteMaskPrev & 0x08);
+	bool noise_period_changed = (m_apuRegLatest[0x0E] != m_apuRegPrev[0x0E] ||
+	                             m_apuRegLatest[0x0F] != m_apuRegPrev[0x0F]);
+	if (noise_new_write || noise_period_changed) {
+		writeMask |= 0x08;
+	}
+
+	// 前回値を更新
+	memcpy(m_apuRegPrev, m_apuRegLatest, sizeof(m_apuRegPrev));
+
+	// FC_COM_BUF に Full APU Update コマンドを書き込み (16バイト全体を使用)
+	// $40: マジックバイト (0xA0 | writeMask)
+	// $41: 検証バイト (0x40 | Noise Vol)
+	// $42-$4F: APU レジスタデータ
+	FC_COM_BUF[0]  = APU_MAGIC_FULL | writeMask;
+	FC_COM_BUF[1]  = APU_CHECK_FULL | (m_apuRegLatest[0x0C] & 0x3F);  // $400C: Noise Vol (検証付き)
 	FC_COM_BUF[2]  = m_apuRegLatest[0x0E];   // $400E: Noise Mode/Period
 	FC_COM_BUF[3]  = m_apuRegLatest[0x0F];   // $400F: Noise Length
 	FC_COM_BUF[4]  = m_apuRegLatest[0x00];   // $4000: Pulse1 Duty/Vol
-	FC_COM_BUF[5]  = m_apuRegLatest[0x01];   // $4001: Pulse1 Sweep
+	FC_COM_BUF[5]  = m_apuRegLatest[0x01] & 0x7F;   // $4001: Pulse1 Sweep (HW sweep無効化)
 	FC_COM_BUF[6]  = m_apuRegLatest[0x02];   // $4002: Pulse1 Freq Lo
 	FC_COM_BUF[7]  = m_apuRegLatest[0x03];   // $4003: Pulse1 Freq Hi
 	FC_COM_BUF[8]  = m_apuRegLatest[0x04];   // $4004: Pulse2 Duty/Vol
-	FC_COM_BUF[9]  = m_apuRegLatest[0x05];   // $4005: Pulse2 Sweep
+	FC_COM_BUF[9]  = m_apuRegLatest[0x05] & 0x7F;   // $4005: Pulse2 Sweep (HW sweep無効化)
 	FC_COM_BUF[10] = m_apuRegLatest[0x06];   // $4006: Pulse2 Freq Lo
 	FC_COM_BUF[11] = m_apuRegLatest[0x07];   // $4007: Pulse2 Freq Hi
 	FC_COM_BUF[12] = m_apuRegLatest[0x08];   // $4008: Triangle Linear
 	FC_COM_BUF[13] = m_apuRegLatest[0x0A];   // $400A: Triangle Freq Lo
 	FC_COM_BUF[14] = m_apuRegLatest[0x0B];   // $400B: Triangle Freq Hi
 	FC_COM_BUF[15] = m_apuRegLatest[0x15];   // $4015: Status/Enable (最後に書き込み)
+}
+
+void rp_system::sendApuSilence() {
+	// Quick Silence コマンドを送信
+	// トラック切り替え時などに使用
+	FC_COM_BUF[0] = APU_MAGIC_SILENCE;
+	FC_COM_BUF[1] = APU_CHECK_SILENCE;
+	// $42-$4F は無視されるが、念のため0で埋める
+	for (int i = 2; i < FC_COM_BUF_SIZE; i++) {
+		FC_COM_BUF[i] = 0;
+	}
+}
+
+void rp_system::sendApuPerChannel(uint8_t channel, bool writeReg3) {
+	// Per-Channel Update コマンドを送信
+	// channel: 0=Pulse1, 1=Pulse2, 2=Triangle, 3=Noise
+	if (channel > 3) return;
+
+	uint8_t flags = writeReg3 ? 0x01 : 0x00;
+	FC_COM_BUF[0] = APU_MAGIC_PERCHAN | (channel & 0x03);
+	FC_COM_BUF[1] = APU_CHECK_PERCHAN | flags;
+
+	// チャンネルごとのレジスタマッピング
+	switch (channel) {
+		case 0:  // Pulse 1: $4000-$4003
+			FC_COM_BUF[2] = m_apuRegLatest[0x00];  // Duty/Vol
+			FC_COM_BUF[3] = m_apuRegLatest[0x01] & 0x7F;  // Sweep (HW sweep無効化)
+			FC_COM_BUF[4] = m_apuRegLatest[0x02];  // Freq Lo
+			FC_COM_BUF[5] = m_apuRegLatest[0x03];  // Freq Hi
+			break;
+		case 1:  // Pulse 2: $4004-$4007
+			FC_COM_BUF[2] = m_apuRegLatest[0x04];  // Duty/Vol
+			FC_COM_BUF[3] = m_apuRegLatest[0x05] & 0x7F;  // Sweep (HW sweep無効化)
+			FC_COM_BUF[4] = m_apuRegLatest[0x06];  // Freq Lo
+			FC_COM_BUF[5] = m_apuRegLatest[0x07];  // Freq Hi
+			break;
+		case 2:  // Triangle: $4008-$400B
+			FC_COM_BUF[2] = m_apuRegLatest[0x08];  // Linear Counter
+			FC_COM_BUF[3] = 0;  // $4009 unused
+			FC_COM_BUF[4] = m_apuRegLatest[0x0A];  // Freq Lo
+			FC_COM_BUF[5] = m_apuRegLatest[0x0B];  // Freq Hi
+			break;
+		case 3:  // Noise: $400C-$400F
+			FC_COM_BUF[2] = m_apuRegLatest[0x0C];  // Vol
+			FC_COM_BUF[3] = 0;  // $400D unused
+			FC_COM_BUF[4] = m_apuRegLatest[0x0E];  // Mode/Period
+			FC_COM_BUF[5] = m_apuRegLatest[0x0F];  // Length
+			break;
+	}
 }
 
 

@@ -94,10 +94,15 @@ struct gb_channel {
     uint16_t env_counter;    // Fixed-point (8.8) counter for accurate 64Hz timing
 
     // Sweep tracking (for Pulse1 only)
-    uint8_t sweep_period;    // Sweep period (0=disabled, 1-7)
-    uint8_t sweep_direction; // 0=increase, 1=decrease
-    uint8_t sweep_shift;     // Sweep shift (0-7)
-    uint16_t sweep_counter;  // Fixed-point (8.8) counter for accurate 128Hz timing
+    // GB sweep is more complex than simple periodic updates
+    uint8_t sweep_period;       // Sweep period from NR10 (0-7, 0 treated as 8 internally)
+    uint8_t sweep_direction;    // 0=addition (freq increase), 1=subtraction (freq decrease)
+    uint8_t sweep_shift;        // Sweep shift amount (0-7)
+    uint16_t sweep_shadow_freq; // Shadow frequency register (internal)
+    uint8_t sweep_divider;      // Current divider value (counts down from period)
+    uint16_t sweep_timer;       // Fixed-point (8.8) timer for 128Hz clocking
+    bool sweep_enabled;         // Internal enable flag (set at trigger)
+    bool sweep_negate_used;     // Negate was used (disables sweep on freq increase)
 };
 
 class rp_gbapu {

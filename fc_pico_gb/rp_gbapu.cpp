@@ -134,15 +134,45 @@ void rp_gbapu::write(uint16_t addr, uint8_t val) {
                 m_ch[0].env_counter = 0;
                 m_ch[0].volume = m_ch[0].env_initial;
 
-                // Initialize sweep
+                // Initialize sweep (accurate GB behavior)
                 uint8_t nr10 = m_regs[NR10];
                 m_ch[0].sweep_period = (nr10 >> 4) & 0x07;
                 m_ch[0].sweep_direction = (nr10 >> 3) & 0x01;
                 m_ch[0].sweep_shift = nr10 & 0x07;
-                m_ch[0].sweep_counter = 0;
+
+                // Copy frequency to shadow register
+                m_ch[0].sweep_shadow_freq = m_ch[0].freq;
+
+                // Reload divider (period 0 is treated as 8)
+                m_ch[0].sweep_divider = m_ch[0].sweep_period ? m_ch[0].sweep_period : 8;
+                m_ch[0].sweep_timer = 0;
+
+                // Enable sweep if period or shift is non-zero
+                m_ch[0].sweep_enabled = (m_ch[0].sweep_period != 0 || m_ch[0].sweep_shift != 0);
+                m_ch[0].sweep_negate_used = false;
+
+                // If shift > 0, perform initial overflow check
+                if (m_ch[0].sweep_shift > 0) {
+                    uint16_t delta = m_ch[0].sweep_shadow_freq >> m_ch[0].sweep_shift;
+                    uint16_t new_freq;
+                    if (m_ch[0].sweep_direction) {
+                        // Subtraction (negate)
+                        new_freq = m_ch[0].sweep_shadow_freq - delta;
+                        // Note: no overflow possible with subtraction
+                    } else {
+                        // Addition
+                        new_freq = m_ch[0].sweep_shadow_freq + delta;
+                        if (new_freq > 2047) {
+                            // Overflow - disable channel immediately
+                            m_ch[0].active = false;
+                        }
+                    }
+                }
 
 #if APU_DEBUG_TRIGGER
-                Serial.printf("P1:trig,v%d,f%d,d%d\n", m_ch[0].volume, m_ch[0].freq, m_ch[0].duty);
+                Serial.printf("P1:trig,v%d,f%d,d%d,sw_p%d,sw_d%d,sw_s%d\n",
+                    m_ch[0].volume, m_ch[0].freq, m_ch[0].duty,
+                    m_ch[0].sweep_period, m_ch[0].sweep_direction, m_ch[0].sweep_shift);
 #endif
             }
             break;
@@ -264,38 +294,84 @@ void rp_gbapu::updateEnvelope(uint8_t ch) {
     }
 }
 
+// Calculate new sweep frequency and check for overflow
+// Returns new frequency, or 0xFFFF if overflow (channel should be disabled)
+static uint16_t calcSweepFreq(gb_channel* ch) {
+    uint16_t delta = ch->sweep_shadow_freq >> ch->sweep_shift;
+
+    if (ch->sweep_direction) {
+        // Subtraction (negate) - frequency decreases
+        ch->sweep_negate_used = true;
+        if (delta > ch->sweep_shadow_freq) {
+            return 0;  // Underflow - clamp to 0
+        }
+        return ch->sweep_shadow_freq - delta;
+    } else {
+        // Addition - frequency increases
+        // If negate was previously used, addition is disabled (GB quirk)
+        if (ch->sweep_negate_used) {
+            return ch->sweep_shadow_freq;  // No change
+        }
+        uint16_t new_freq = ch->sweep_shadow_freq + delta;
+        if (new_freq > 2047) {
+            return 0xFFFF;  // Overflow - disable channel
+        }
+        return new_freq;
+    }
+}
+
 // Update sweep for channel 1 (called every frame at 60Hz)
-// GB sweep runs at 128Hz, NES sweep runs at 120Hz (close enough)
-// This function now uses fractional counting for better timing accuracy
+// GB sweep runs at 128Hz - we use fractional timing for accuracy
+// Accurate implementation based on GB APU behavior:
+// - Shadow frequency is used for calculations
+// - Period 0 is treated as 8
+// - Overflow check happens before applying new frequency
+// - Negate usage disables subsequent addition
 void rp_gbapu::updateSweep() {
-    if (!m_ch[0].active || m_ch[0].sweep_period == 0 || m_ch[0].sweep_shift == 0) {
+    if (!m_ch[0].active) {
         return;
     }
 
     // Fractional timing: accumulate 128 ticks per second at 60Hz update rate
-    // Each frame adds 128/60 ≈ 2.133 ticks
     // Use fixed-point: 128 * 256 / 60 = 546 per frame (8.8 fixed point)
-    m_ch[0].sweep_counter += 546;  // 2.133 * 256
+    m_ch[0].sweep_timer += 546;
 
-    // Trigger sweep when counter reaches threshold (sweep_period * 256)
-    uint16_t threshold = (uint16_t)m_ch[0].sweep_period * 256;
-    if (m_ch[0].sweep_counter >= threshold) {
-        m_ch[0].sweep_counter -= threshold;
+    // Clock sweep at 128Hz (threshold = 256 for each tick)
+    while (m_ch[0].sweep_timer >= 256) {
+        m_ch[0].sweep_timer -= 256;
 
-        uint16_t delta = m_ch[0].freq >> m_ch[0].sweep_shift;
+        // Decrement divider
+        if (m_ch[0].sweep_divider > 0) {
+            m_ch[0].sweep_divider--;
+        }
 
-        if (m_ch[0].sweep_direction) {
-            // Decrease frequency (negate)
-            if (m_ch[0].freq >= delta) {
-                m_ch[0].freq -= delta;
-            }
-        } else {
-            // Increase frequency
-            m_ch[0].freq += delta;
-            if (m_ch[0].freq > 2047) {
-                // Overflow - disable channel
-                m_ch[0].active = false;
-                m_ch[0].freq = 2047;
+        // When divider reaches 0, clock the sweep
+        if (m_ch[0].sweep_divider == 0) {
+            // Reload divider (period 0 is treated as 8)
+            m_ch[0].sweep_divider = m_ch[0].sweep_period ? m_ch[0].sweep_period : 8;
+
+            // Only apply sweep if enabled and shift > 0
+            if (m_ch[0].sweep_enabled && m_ch[0].sweep_shift > 0) {
+                // Calculate new frequency
+                uint16_t new_freq = calcSweepFreq(&m_ch[0]);
+
+                if (new_freq == 0xFFFF) {
+                    // Overflow - disable channel
+                    m_ch[0].active = false;
+                    return;
+                }
+
+                // Check overflow AGAIN with the new frequency (GB quirk)
+                // This catches cases where the next sweep would overflow
+                m_ch[0].sweep_shadow_freq = new_freq;
+                uint16_t next_freq = calcSweepFreq(&m_ch[0]);
+                if (next_freq == 0xFFFF) {
+                    m_ch[0].active = false;
+                    return;
+                }
+
+                // Apply new frequency
+                m_ch[0].freq = new_freq;
             }
         }
     }
