@@ -230,6 +230,18 @@ void rp_gbapu::write(uint16_t addr, uint8_t val) {
             }
             break;
 
+        case NR10:  // Channel 1 sweep register
+            // GB quirk: If negate was used and direction is changed to addition,
+            // the channel is immediately disabled
+            if (m_ch[0].sweep_negate_used && !(val & 0x08)) {
+                // Negate was used previously, and now direction is addition (bit3=0)
+                m_ch[0].active = false;
+#if APU_DEBUG_TRIGGER
+                Serial.println("P1:disabled by NR10 direction change after negate");
+#endif
+            }
+            break;
+
         case NR12:  // Channel 1 volume envelope - check DAC
             if ((val & 0xF8) == 0) {
                 m_ch[0].active = false;
